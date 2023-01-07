@@ -177,32 +177,33 @@ proc loadImage*(path: string): Image =
   )
 
 proc rgbaToArgb(img: var seq[byte], width, height, channels: int, premultiply: bool) =
-  {.push checks: off.}
+  template conversionLoop(premultiply: static bool) {.dirty.} =
+    {.push checks: off.}
 
-  for y in 0..<height:
-    for x in 0..<width:
-      let
-        r = channels * (x + y * width)
-        g = r + 1
-        b = g + 1
-        a = b + 1
-      if premultiply:
-        let
-          rr: uint32 = img[r]
-          gg: uint32 = img[g]
-          bb: uint32 = img[b]
-          aa: uint32 = img[a]
-        (img[r], img[g], img[b], img[a]) =
-          when cpuEndian == bigEndian:
-            (img[a], byte((rr * aa + 128) div 255), byte((gg * aa + 128) div 255), byte((bb * aa + 128) div 255))
-          else:
-            (byte((bb * aa + 128) div 255'u32), byte((gg * aa + 128) div 255), byte((rr * aa + 128) div 255), img[a])
-      else:
-        (img[r], img[g], img[b], img[a]) =
-          when cpuEndian == bigEndian: (img[a], img[r], img[g], img[b])
-          else: (img[b], img[g], img[r], img[a])
+    for y in 0..<height:
+      for x in 0..<width:
+        when premultiply:
+          let
+            rr: uint32 = img[r]
+            gg: uint32 = img[g]
+            bb: uint32 = img[b]
+            aa: uint32 = img[a]
+          (img[r], img[g], img[b], img[a]) =
+            when cpuEndian == bigEndian:
+              (img[a], byte((rr * aa + 128) div 255), byte((gg * aa + 128) div 255), byte((bb * aa + 128) div 255))
+            else:
+              (byte((bb * aa + 128) div 255'u32), byte((gg * aa + 128) div 255), byte((rr * aa + 128) div 255), img[a])
+        else:
+          (img[r], img[g], img[b], img[a]) =
+            when cpuEndian == bigEndian: (img[a], img[r], img[g], img[b])
+            else: (img[b], img[g], img[r], img[a])
 
-  {.pop.}
+    {.pop.}
+
+  if premultiply:
+    conversionLoop(premultiply = true)
+  else:
+    conversionLoop(premultiply = false)
 
 proc getCairo(image: Image): ptr Context =
   if image.cairo.isNil:
